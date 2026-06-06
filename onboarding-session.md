@@ -1,5 +1,14 @@
 # AdiShila Onboarding & Training Session Notes
 
+## System Update Notes — 2026-06-06
+- Replaced localStorage with Firebase Firestore (6 real-time collections)
+- Wired: Export Report CSV, Assign Lead, Approve & Publish, Complete Onboarding
+- Added: Notification Center, CRM search/filter/sort, Pipeline Funnel chart, Content Timeline
+- Added: Task comments thread, GBP auto-credit on task completion
+- Added: Per-user onboarding persistence, mobile bottom nav, Error Boundary
+- Added: firestore.rules, vercel.json, .env.example
+
+
 ## Welcome to the AdiShila Platform
 
 The AdiShila Integrated Tech Stack serves as the unified hub for our 30 field teams and 5 administrators to collaborate, track progress, and earn **Go-Brics Points (GBP)**. 

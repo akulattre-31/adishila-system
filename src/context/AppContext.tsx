@@ -168,37 +168,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
 
+  // Sync currentUser with live Firestore data
+  useEffect(() => {
+    if (currentUser && users.length > 0) {
+      const fresh = users.find(u => u.id === currentUser.id);
+      if (fresh && (fresh.gbp !== currentUser.gbp || fresh.onboardingComplete !== currentUser.onboardingComplete)) {
+        setCurrentUser(fresh);
+        localStorage.setItem('adishila_user', JSON.stringify(fresh));
+      }
+    }
+  }, [users, currentUser]);
+
   // Firestore real-time listeners
   useEffect(() => {
+    let resolved = 0;
+    const checkDone = () => { if (++resolved >= 6) setLoading(false); };
+
     try {
       const unsubTasks = onSnapshot(collection(db, 'tasks'), snap => {
         setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
-      }, err => setError(err.message));
+        checkDone();
+      }, err => { setError(err.message); checkDone(); });
       
       const unsubLeads = onSnapshot(collection(db, 'leads'), snap => {
         setLeads(snap.docs.map(d => ({ id: d.id, ...d.data() } as Lead)));
-      }, err => setError(err.message));
+        checkDone();
+      }, err => { setError(err.message); checkDone(); });
       
       const unsubContent = onSnapshot(collection(db, 'content'), snap => {
         setContent(snap.docs.map(d => ({ id: d.id, ...d.data() } as ContentItem)));
-      }, err => setError(err.message));
+        checkDone();
+      }, err => { setError(err.message); checkDone(); });
       
       const unsubUsers = onSnapshot(collection(db, 'users'), snap => {
         setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
-      }, err => setError(err.message));
+        checkDone();
+      }, err => { setError(err.message); checkDone(); });
       
       const unsubAnnouncements = onSnapshot(collection(db, 'announcements'), snap => {
         setAnnouncements(snap.docs.map(d => ({ id: d.id, ...d.data() as any })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      }, err => setError(err.message));
+        checkDone();
+      }, err => { setError(err.message); checkDone(); });
 
       const unsubNotifications = onSnapshot(collection(db, 'notifications'), snap => {
         setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() as any })).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-      }, err => setError(err.message));
-
-      // After listeners are established, mark as loaded
-      const timer = setTimeout(() => {
-        setLoading(false);
-      }, 1000);
+        checkDone();
+      }, err => { setError(err.message); checkDone(); });
 
       return () => {
         unsubTasks();
@@ -207,7 +222,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         unsubUsers();
         unsubAnnouncements();
         unsubNotifications();
-        clearTimeout(timer);
       };
     } catch (err: any) {
       setError(err.message);

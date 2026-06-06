@@ -48,13 +48,13 @@ function MainLayout() {
 
   const renderModule = () => {
     switch(activeModule) {
-      case 'dashboard': return <Analytics />; // Overview maps to Analytics for now
-      case 'tasks': return <TaskManager />;
-      case 'crm': return <CRM />;
-      case 'content': return <ContentScheduler />;
-      case 'analytics': return <Analytics />;
-      case 'communication': return <Communication />;
-      default: return <Analytics />;
+      case 'dashboard': return <ErrorBoundary><Analytics /></ErrorBoundary>;
+      case 'tasks': return <ErrorBoundary><TaskManager /></ErrorBoundary>;
+      case 'crm': return <ErrorBoundary><CRM /></ErrorBoundary>;
+      case 'content': return <ErrorBoundary><ContentScheduler /></ErrorBoundary>;
+      case 'analytics': return <ErrorBoundary><Analytics /></ErrorBoundary>;
+      case 'communication': return <ErrorBoundary><Communication /></ErrorBoundary>;
+      default: return <ErrorBoundary><Analytics /></ErrorBoundary>;
     }
   };
 
@@ -72,9 +72,7 @@ function MainLayout() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
             <NotificationCenter />
           </div>
-          <ErrorBoundary>
-            {renderModule()}
-          </ErrorBoundary>
+          {renderModule()}
         </div>
       </main>
     </div>

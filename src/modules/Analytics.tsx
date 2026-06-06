@@ -6,37 +6,37 @@ export default function Analytics() {
   const isChiefAdmin = currentUser?.role === 'Chief Administrator';
   
   const handleExport = () => {
-    let csv = "AdiShila System Export\\n\\n";
+    let csv = "AdiShila System Export\n\n";
     
     // 1. CRM Pipeline
-    csv += "--- CRM PIPELINE ---\\n";
-    csv += "Name,City,Tier,SKU Interest,Phone,Source,Status,Last Contact\\n";
+    csv += "--- CRM PIPELINE ---\n";
+    csv += "Name,City,Tier,SKU Interest,Phone,Source,Status,Last Contact\n";
     leads.forEach(l => {
-      csv += `"${l.name}","${l.city}","${l.tier}","${l.skuInterest}","${l.phone}","${l.source}","${l.status}","${l.lastContact}"\\n`;
+      csv += `"${l.name}","${l.city}","${l.tier}","${l.skuInterest}","${l.phone}","${l.source}","${l.status}","${l.lastContact}"\n`;
     });
-    csv += "\\n";
+    csv += "\n";
     
     // 2. Task Summary
-    csv += "--- TASK SUMMARY ---\\n";
-    csv += "ID,Title,Grade,GBP Value,Status\\n";
+    csv += "--- TASK SUMMARY ---\n";
+    csv += "ID,Title,Grade,GBP Value,Status\n";
     tasks.forEach(t => {
-      csv += `"${t.id}","${t.title}","${t.grade}","${t.gbp}","${t.status}"\\n`;
+      csv += `"${t.id}","${t.title}","${t.grade}","${t.gbp}","${t.status}"\n`;
     });
-    csv += "\\n";
+    csv += "\n";
     
     // 3. GBP Leaderboard
-    csv += "--- GBP LEADERBOARD ---\\n";
-    csv += "Name,Role,GBP Earned\\n";
+    csv += "--- GBP LEADERBOARD ---\n";
+    csv += "Name,Role,GBP Earned\n";
     users.forEach(u => {
-      csv += `"${u.name}","${u.role}","${u.gbp}"\\n`;
+      csv += `"${u.name}","${u.role}","${u.gbp}"\n`;
     });
-    csv += "\\n";
+    csv += "\n";
     
     // 4. Content Pipeline
-    csv += "--- CONTENT PIPELINE ---\\n";
-    csv += "Title,Platform,Persona,Date,Status\\n";
+    csv += "--- CONTENT PIPELINE ---\n";
+    csv += "Title,Platform,Persona,Date,Status\n";
     content.forEach(c => {
-      csv += `"${c.title}","${c.platform}","${c.persona}","${c.scheduledDate}","${c.status}"\\n`;
+      csv += `"${c.title}","${c.platform}","${c.persona}","${c.scheduledDate}","${c.status}"\n`;
     });
     
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
