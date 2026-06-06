@@ -3,8 +3,9 @@ import { useAppContext } from '../context/AppContext';
 import type { ContentItem } from '../context/AppContext';
 
 export default function ContentScheduler() {
-  const { content, addContent, skus, currentUser } = useAppContext();
+  const { content, addContent, skus, currentUser, approveContent } = useAppContext();
   const [showAdd, setShowAdd] = useState(false);
+  const [toast, setToast] = useState('');
   const [newItem, setNewItem] = useState<Partial<ContentItem>>({ platform: 'Instagram', persona: 'Arjun', status: 'Draft' });
 
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Chief Administrator';
@@ -28,6 +29,12 @@ export default function ContentScheduler() {
     }
   };
 
+  const handleApprove = (item: ContentItem) => {
+    approveContent(item.id);
+    setToast(`✓ Published — ${item.title}`);
+    setTimeout(() => setToast(''), 3000);
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -39,6 +46,12 @@ export default function ContentScheduler() {
           + Schedule Content
         </button>
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: '24px', right: '24px', background: '#5DB075', color: '#fff', padding: '12px 24px', borderRadius: '4px', fontWeight: 500, zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          {toast}
+        </div>
+      )}
 
       {showAdd && (
         <form onSubmit={handleAdd} className="card" style={{ marginBottom: '32px', display: 'grid', gap: '16px', gridTemplateColumns: '1fr 1fr' }}>
@@ -89,7 +102,7 @@ export default function ContentScheduler() {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <span className={`badge ${item.status === 'Published' ? 'badge-green' : 'badge-gold'}`}>{item.status}</span>
               {isAdmin && item.status !== 'Published' && (
-                <button className="btn-outline" style={{ padding: '6px 12px' }}>Approve & Publish</button>
+                <button className="btn-outline" style={{ padding: '6px 12px' }} onClick={() => handleApprove(item)}>Approve & Publish</button>
               )}
             </div>
           </div>

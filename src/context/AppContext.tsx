@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { collection, onSnapshot, doc, setDoc, updateDoc, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 
 // Data Types
 export type UserRole = 'Member' | 'Admin' | 'Chief Administrator';
@@ -10,6 +12,7 @@ export interface User {
   role: UserRole;
   teamId: string;
   gbp: number;
+  onboardingComplete?: boolean;
 }
 
 export interface Task {
@@ -40,6 +43,8 @@ export interface Lead {
   status: 'Cold' | 'Warm' | 'Hot' | 'Converted';
   notes: string;
   source: string;
+  assigneeId?: string;
+  assigneeName?: string;
 }
 
 export interface ContentItem {
@@ -51,6 +56,15 @@ export interface ContentItem {
   scheduledDate: string;
   status: 'Draft' | 'Scheduled' | 'Published';
   gbpEarned: number;
+  authorId?: string;
+}
+
+export interface Notification {
+  id: string;
+  type: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
 }
 
 export interface SKU {
@@ -93,11 +107,11 @@ const MOCK_LEADS: Lead[] = [
 ];
 
 const MOCK_CONTENT: ContentItem[] = [
-  { id: 'c1', title: '"What is Shungite?" science explainer', platform: 'Instagram', persona: 'Arjun', sku: 'Multiple', scheduledDate: '2026-06-10', status: 'Scheduled', gbpEarned: 0 },
-  { id: 'c2', title: 'Family Kavach Pack Diwali offer (Hindi)', platform: 'WhatsApp', persona: 'Priya', sku: 'Kavach Shield — OM', scheduledDate: '2026-10-15', status: 'Scheduled', gbpEarned: 0 },
-  { id: 'c3', title: 'Aesthetic unboxing, gold OM close-up', platform: 'Instagram', persona: 'Riya', sku: 'Kavach Shield — OM', scheduledDate: '2026-06-17', status: 'Scheduled', gbpEarned: 0 },
-  { id: 'c4', title: 'Kavach OM listing update', platform: 'Amazon.in', persona: 'Arjun', sku: 'Kavach Shield — OM', scheduledDate: '2026-06-05', status: 'Published', gbpEarned: 0 },
-  { id: 'c5', title: 'B2B listing update', platform: 'IndiaMART', persona: 'Arjun', sku: 'Multiple', scheduledDate: '2026-06-08', status: 'Scheduled', gbpEarned: 0 },
+  { id: 'c1', title: '"What is Shungite?" science explainer', platform: 'Instagram', persona: 'Arjun', sku: 'Multiple', scheduledDate: '2026-06-10', status: 'Scheduled', gbpEarned: 0, authorId: 'u1' },
+  { id: 'c2', title: 'Family Kavach Pack Diwali offer (Hindi)', platform: 'WhatsApp', persona: 'Priya', sku: 'Kavach Shield — OM', scheduledDate: '2026-10-15', status: 'Scheduled', gbpEarned: 0, authorId: 'u1' },
+  { id: 'c3', title: 'Aesthetic unboxing, gold OM close-up', platform: 'Instagram', persona: 'Riya', sku: 'Kavach Shield — OM', scheduledDate: '2026-06-17', status: 'Scheduled', gbpEarned: 0, authorId: 'u1' },
+  { id: 'c4', title: 'Kavach OM listing update', platform: 'Amazon.in', persona: 'Arjun', sku: 'Kavach Shield — OM', scheduledDate: '2026-06-05', status: 'Published', gbpEarned: 0, authorId: 'u1' },
+  { id: 'c5', title: 'B2B listing update', platform: 'IndiaMART', persona: 'Arjun', sku: 'Multiple', scheduledDate: '2026-06-08', status: 'Scheduled', gbpEarned: 0, authorId: 'u1' },
 ];
 
 const MOCK_USERS: User[] = [
@@ -108,6 +122,7 @@ const MOCK_USERS: User[] = [
 
 interface AppContextType {
   currentUser: User | null;
+  loading: boolean;
   login: (userId: string) => void;
   logout: () => void;
   skus: SKU[];
@@ -116,65 +131,114 @@ interface AppContextType {
   leads: Lead[];
   addLead: (lead: Lead) => void;
   updateLead: (lead: Lead) => void;
+  assignLead: (leadId: string, userId: string) => void;
   content: ContentItem[];
   addContent: (content: ContentItem) => void;
+  approveContent: (itemId: string) => void;
   users: User[];
+  completeOnboarding: () => void;
   announcements: { id: string; text: string; author: string; date: string }[];
   addAnnouncement: (text: string) => void;
+  addSystemAnnouncement: (text: string) => void;
+  notifications: Notification[];
+  markNotificationRead: (id: string) => void;
+  seedFirestore: () => void;
+  error: string | null;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // State for all modules
   const [skus] = useState<SKU[]>(MOCK_SKUS);
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
-  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
-  const [content, setContent] = useState<ContentItem[]>(MOCK_CONTENT);
-  const [users] = useState<User[]>(MOCK_USERS);
-  const [announcements, setAnnouncements] = useState([
-    { id: 'a1', text: 'Welcome to the AdiShila Portal! Please complete your onboarding checklist.', author: 'Tech Lead', date: '2026-06-01' }
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [content, setContent] = useState<ContentItem[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  // Load from local storage on mount (simulating a DB fetch)
+  // Local storage for user session
   useEffect(() => {
     const savedUser = localStorage.getItem('adishila_user');
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
-    
-    const savedTasks = localStorage.getItem('adishila_tasks');
-    if (savedTasks) setTasks(JSON.parse(savedTasks));
-
-    const savedLeads = localStorage.getItem('adishila_leads');
-    if (savedLeads) setLeads(JSON.parse(savedLeads));
-
-    const savedContent = localStorage.getItem('adishila_content');
-    if (savedContent) setContent(JSON.parse(savedContent));
-    
-    const savedAnnouncements = localStorage.getItem('adishila_announcements');
-    if (savedAnnouncements) setAnnouncements(JSON.parse(savedAnnouncements));
   }, []);
 
-  // Save to local storage on changes
+  // Firestore real-time listeners
   useEffect(() => {
-    localStorage.setItem('adishila_tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    try {
+      const unsubTasks = onSnapshot(collection(db, 'tasks'), snap => {
+        setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
+      }, err => setError(err.message));
+      
+      const unsubLeads = onSnapshot(collection(db, 'leads'), snap => {
+        setLeads(snap.docs.map(d => ({ id: d.id, ...d.data() } as Lead)));
+      }, err => setError(err.message));
+      
+      const unsubContent = onSnapshot(collection(db, 'content'), snap => {
+        setContent(snap.docs.map(d => ({ id: d.id, ...d.data() } as ContentItem)));
+      }, err => setError(err.message));
+      
+      const unsubUsers = onSnapshot(collection(db, 'users'), snap => {
+        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
+      }, err => setError(err.message));
+      
+      const unsubAnnouncements = onSnapshot(collection(db, 'announcements'), snap => {
+        setAnnouncements(snap.docs.map(d => ({ id: d.id, ...d.data() as any })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      }, err => setError(err.message));
 
-  useEffect(() => {
-    localStorage.setItem('adishila_leads', JSON.stringify(leads));
-  }, [leads]);
+      const unsubNotifications = onSnapshot(collection(db, 'notifications'), snap => {
+        setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() as any })).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      }, err => setError(err.message));
 
-  useEffect(() => {
-    localStorage.setItem('adishila_content', JSON.stringify(content));
-  }, [content]);
-  
-  useEffect(() => {
-    localStorage.setItem('adishila_announcements', JSON.stringify(announcements));
-  }, [announcements]);
+      // After listeners are established, mark as loaded
+      const timer = setTimeout(() => {
+        setLoading(false);
+      }, 1000);
+
+      return () => {
+        unsubTasks();
+        unsubLeads();
+        unsubContent();
+        unsubUsers();
+        unsubAnnouncements();
+        unsubNotifications();
+        clearTimeout(timer);
+      };
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+    }
+  }, []);
+
+  const seedFirestore = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'leads'));
+      if (snap.empty) {
+        for (const l of MOCK_LEADS) { await setDoc(doc(db, 'leads', l.id), l); }
+        for (const t of MOCK_TASKS) { await setDoc(doc(db, 'tasks', t.id), t); }
+        for (const c of MOCK_CONTENT) { await setDoc(doc(db, 'content', c.id), c); }
+        for (const u of MOCK_USERS) { await setDoc(doc(db, 'users', u.id), u); }
+        await setDoc(doc(db, 'announcements', 'a1'), { id: 'a1', text: 'Welcome to the AdiShila Portal! Please complete your onboarding checklist.', author: 'Tech Lead', date: '2026-06-01' });
+        alert('Firestore seeded successfully! Reloading...');
+        window.location.reload();
+      } else {
+        alert('Firestore is already seeded.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    }
+  };
 
   const login = (userId: string) => {
-    const user = users.find((u) => u.id === userId);
+    // fallback to MOCK_USERS if DB is empty
+    const availableUsers = users.length > 0 ? users : MOCK_USERS;
+    const user = availableUsers.find((u) => u.id === userId);
     if (user) {
       setCurrentUser(user);
       localStorage.setItem('adishila_user', JSON.stringify(user));
@@ -186,23 +250,96 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('adishila_user');
   };
 
-  const updateTask = (updatedTask: Task) => {
-    setTasks(tasks.map(t => t.id === updatedTask.id ? updatedTask : t));
+  const completeOnboarding = async () => {
+    if (currentUser) {
+      const updatedUser = { ...currentUser, onboardingComplete: true };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('adishila_user', JSON.stringify(updatedUser));
+      try { await updateDoc(doc(db, 'users', currentUser.id), { onboardingComplete: true }); } catch(e) { console.error(e); }
+    }
   };
 
-  const addLead = (lead: Lead) => {
-    setLeads([...leads, lead]);
+  const addNotification = async (type: string, message: string) => {
+    const newNotif = {
+      id: Date.now().toString(),
+      type,
+      message,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+    try { await setDoc(doc(db, 'notifications', newNotif.id), newNotif); } catch(e) { console.error(e); }
   };
 
-  const updateLead = (updatedLead: Lead) => {
-    setLeads(leads.map(l => l.id === updatedLead.id ? updatedLead : l));
+  const markNotificationRead = async (id: string) => {
+    try { await updateDoc(doc(db, 'notifications', id), { read: true }); } catch(e) { console.error(e); }
   };
 
-  const addContent = (item: ContentItem) => {
-    setContent([...content, item]);
+  const updateTask = async (task: Task) => {
+    try {
+      const oldTask = tasks.find(t => t.id === task.id);
+      await updateDoc(doc(db, 'tasks', task.id), { ...task });
+      
+      // GBP Auto-Credit
+      if (oldTask && oldTask.status !== 'Completed' && task.status === 'Completed' && task.assigneeId) {
+        const assignee = users.find(u => u.id === task.assigneeId);
+        if (assignee) {
+          await updateDoc(doc(db, 'users', assignee.id), { gbp: assignee.gbp + task.gbp });
+          alert(`✓ +${task.gbp} GBP credited to ${assignee.name}`);
+        }
+        await addNotification('task_completed', `Task "${task.title}" completed by ${assignee?.name || 'User'}`);
+      } else if (oldTask && oldTask.status === 'Completed' && task.status !== 'Completed' && task.assigneeId) {
+        // Reverse GBP if moved from Completed back to In Progress
+        const assignee = users.find(u => u.id === task.assigneeId);
+        if (assignee) {
+          await updateDoc(doc(db, 'users', assignee.id), { gbp: assignee.gbp - task.gbp });
+        }
+      }
+    } catch(e) { console.error(e); }
   };
 
-  const addAnnouncement = (text: string) => {
+  const addLead = async (lead: Lead) => {
+    try { 
+      await setDoc(doc(db, 'leads', lead.id), lead); 
+      await addNotification('lead_added', `New lead ${lead.name} added by ${currentUser?.name || 'User'}`);
+    } catch(e) { console.error(e); }
+  };
+
+  const updateLead = async (updatedLead: Lead) => {
+    try { await updateDoc(doc(db, 'leads', updatedLead.id), { ...updatedLead }); } catch(e) { console.error(e); }
+  };
+
+  const assignLead = async (leadId: string, userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      try { await updateDoc(doc(db, 'leads', leadId), { assigneeId: user.id, assigneeName: user.name }); } catch(e) { console.error(e); }
+    }
+  };
+
+  const addContent = async (item: ContentItem) => {
+    const newItem = { ...item, authorId: currentUser?.id };
+    try { await setDoc(doc(db, 'content', newItem.id), newItem); } catch(e) { console.error(e); }
+  };
+
+  const approveContent = async (itemId: string) => {
+    const item = content.find(c => c.id === itemId);
+    if (!item || item.status === 'Published') return;
+
+    const sku = skus.find(s => s.name === item.sku);
+    const gbpRate = sku ? parseInt(sku.gbpRate) || 0 : 0;
+    
+    try {
+      await updateDoc(doc(db, 'content', itemId), { status: 'Published', gbpEarned: gbpRate });
+      await addNotification('content_published', `Content "${item.title}" published`);
+      if (item.authorId) {
+        const author = users.find(u => u.id === item.authorId);
+        if (author) {
+          await updateDoc(doc(db, 'users', author.id), { gbp: author.gbp + gbpRate });
+        }
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  const addAnnouncement = async (text: string) => {
     if (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'Chief Administrator')) {
       const newAnn = {
         id: Date.now().toString(),
@@ -210,19 +347,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
         author: currentUser.name,
         date: new Date().toISOString().split('T')[0]
       };
-      setAnnouncements([newAnn, ...announcements]);
+      try { 
+        await setDoc(doc(db, 'announcements', newAnn.id), newAnn);
+        await addNotification('announcement', `New announcement posted by ${currentUser.name}`);
+      } catch(e) { console.error(e); }
     }
+  };
+
+  const addSystemAnnouncement = async (text: string) => {
+    const newAnn = {
+      id: Date.now().toString(),
+      text,
+      author: 'System',
+      date: new Date().toISOString().split('T')[0]
+    };
+    try { await setDoc(doc(db, 'announcements', newAnn.id), newAnn); } catch(e) { console.error(e); }
   };
 
   return (
     <AppContext.Provider value={{
-      currentUser, login, logout,
+      currentUser, loading, login, logout,
       skus,
       tasks, updateTask,
-      leads, addLead, updateLead,
-      content, addContent,
-      users,
-      announcements, addAnnouncement
+      leads, addLead, updateLead, assignLead,
+      content, addContent, approveContent,
+      users, completeOnboarding,
+      announcements, addAnnouncement, addSystemAnnouncement,
+      notifications, markNotificationRead,
+      seedFirestore, error
     }}>
       {children}
     </AppContext.Provider>

@@ -1,12 +1,79 @@
 import { useAppContext } from '../context/AppContext';
 
 export default function Analytics() {
-  const { users, skus } = useAppContext();
+  const { users, skus, leads, tasks, content, currentUser, seedFirestore } = useAppContext();
+  
+  const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Chief Administrator';
+  const isChiefAdmin = currentUser?.role === 'Chief Administrator';
+  
+  const handleExport = () => {
+    let csv = "AdiShila System Export\\n\\n";
+    
+    // 1. CRM Pipeline
+    csv += "--- CRM PIPELINE ---\\n";
+    csv += "Name,City,Tier,SKU Interest,Phone,Source,Status,Last Contact\\n";
+    leads.forEach(l => {
+      csv += `"${l.name}","${l.city}","${l.tier}","${l.skuInterest}","${l.phone}","${l.source}","${l.status}","${l.lastContact}"\\n`;
+    });
+    csv += "\\n";
+    
+    // 2. Task Summary
+    csv += "--- TASK SUMMARY ---\\n";
+    csv += "ID,Title,Grade,GBP Value,Status\\n";
+    tasks.forEach(t => {
+      csv += `"${t.id}","${t.title}","${t.grade}","${t.gbp}","${t.status}"\\n`;
+    });
+    csv += "\\n";
+    
+    // 3. GBP Leaderboard
+    csv += "--- GBP LEADERBOARD ---\\n";
+    csv += "Name,Role,GBP Earned\\n";
+    users.forEach(u => {
+      csv += `"${u.name}","${u.role}","${u.gbp}"\\n`;
+    });
+    csv += "\\n";
+    
+    // 4. Content Pipeline
+    csv += "--- CONTENT PIPELINE ---\\n";
+    csv += "Title,Platform,Persona,Date,Status\\n";
+    content.forEach(c => {
+      csv += `"${c.title}","${c.platform}","${c.persona}","${c.scheduledDate}","${c.status}"\\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.setAttribute("href", url);
+    link.setAttribute("download", `AdiShila_Report_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   
   // Mock Data for Breakeven Tracker
   const currentUnits = 120;
   const targetUnits = 1000;
   const progressPercent = Math.min((currentUnits / targetUnits) * 100, 100);
+
+  // Chart A: Pipeline Funnel Data
+  const funnelData = [
+    { stage: 'Cold', count: leads.filter(l => l.status === 'Cold').length },
+    { stage: 'Warm', count: leads.filter(l => l.status === 'Warm').length },
+    { stage: 'Hot', count: leads.filter(l => l.status === 'Hot').length },
+    { stage: 'Converted', count: leads.filter(l => l.status === 'Converted').length }
+  ];
+  const maxFunnel = Math.max(...funnelData.map(d => d.count), 1);
+
+  // Chart B: Content Timeline Data (Next 30 Days)
+  const today = new Date();
+  const next30Days = new Date();
+  next30Days.setDate(today.getDate() + 30);
+  
+  const timelineContent = content.filter(c => {
+    const d = new Date(c.scheduledDate);
+    return d >= today && d <= next30Days;
+  }).sort((a,b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
   return (
     <div>
@@ -15,7 +82,12 @@ export default function Analytics() {
           <h2 style={{ marginBottom: '8px' }}>Analytics & GBP Leaderboard</h2>
           <p className="text-dim">Track sales volume, margins, and team performance.</p>
         </div>
-        <button className="btn-outline">Export Report</button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          {isChiefAdmin && (
+            <button className="btn-outline" style={{ borderColor: 'var(--gold)' }} onClick={seedFirestore}>Seed Initial Data</button>
+          )}
+          <button className="btn-outline" onClick={handleExport}>Export Report</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '32px' }}>
@@ -63,6 +135,66 @@ export default function Analytics() {
           </div>
         </div>
 
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+        {/* Pipeline Funnel Chart */}
+        <div className="card">
+          <h3 style={{ marginBottom: '16px' }}>Pipeline Funnel</h3>
+          <div style={{ display: 'flex', height: '200px', alignItems: 'flex-end', justifyContent: 'space-around', paddingBottom: '24px', borderBottom: '1px solid var(--stone)' }}>
+            {funnelData.map((d, i) => {
+              const heightPct = (d.count / maxFunnel) * 100;
+              return (
+                <div key={d.stage} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%' }}>
+                  <div style={{ color: 'var(--gold)', fontWeight: 'bold', marginBottom: '8px' }}>{d.count}</div>
+                  <div style={{ 
+                    width: '100%', 
+                    height: `${heightPct}%`, 
+                    minHeight: '4px',
+                    background: 'linear-gradient(180deg, var(--gold-lt) 0%, var(--gold-dk) 100%)',
+                    borderRadius: '4px 4px 0 0',
+                    transition: 'height 0.5s ease'
+                  }}></div>
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-dim)' }}>{d.stage}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content Timeline Chart */}
+        <div className="card">
+          <h3 style={{ marginBottom: '16px' }}>Content Pipeline (Next 30 Days)</h3>
+          <div style={{ position: 'relative', height: '200px', padding: '20px 0' }}>
+            {/* Timeline axis */}
+            <div style={{ position: 'absolute', top: '50%', left: '0', right: '0', height: '2px', background: 'var(--stone)' }}></div>
+            
+            {timelineContent.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--text-dim)', marginTop: '60px' }}>No content scheduled in next 30 days</div>
+            ) : (
+              timelineContent.map((c, i) => {
+                const itemDate = new Date(c.scheduledDate);
+                const diffTime = Math.abs(itemDate.getTime() - today.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const leftPct = (diffDays / 30) * 100;
+                
+                return (
+                  <div 
+                    key={c.id} 
+                    style={{ position: 'absolute', left: `${leftPct}%`, top: i % 2 === 0 ? '20%' : '60%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}
+                    title={`${c.title} - ${c.platform}`}
+                  >
+                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px', whiteSpace: 'nowrap' }}>{c.scheduledDate.substring(5)}</div>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'var(--gold)', border: '2px solid var(--charcoal)', zIndex: 2 }}></div>
+                    <div style={{ width: '1px', height: i % 2 === 0 ? 'calc(50% - 10px)' : '0', background: 'var(--stone)', position: 'absolute', top: '100%', left: '50%' }}></div>
+                    <div style={{ width: '1px', height: i % 2 === 1 ? 'calc(50% - 10px)' : '0', background: 'var(--stone)', position: 'absolute', bottom: '100%', left: '50%' }}></div>
+                    <div style={{ fontSize: '11px', color: 'var(--cream)', marginTop: '4px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.platform}</div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="card">
