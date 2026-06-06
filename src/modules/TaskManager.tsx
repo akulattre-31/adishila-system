@@ -13,14 +13,6 @@ export default function TaskManager() {
     return true;
   });
 
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'Completed': return 'badge-green';
-      case 'In Progress': return 'badge-blue';
-      default: return 'badge-gold';
-    }
-  };
-
   const getGradeColor = (grade?: string) => {
     if (grade === 'S') return 'var(--gold)';
     return 'var(--text-dim)';

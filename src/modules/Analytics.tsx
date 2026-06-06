@@ -3,7 +3,6 @@ import { useAppContext } from '../context/AppContext';
 export default function Analytics() {
   const { users, skus, leads, tasks, content, currentUser, seedFirestore } = useAppContext();
   
-  const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Chief Administrator';
   const isChiefAdmin = currentUser?.role === 'Chief Administrator';
   
   const handleExport = () => {
@@ -120,10 +119,9 @@ export default function Analytics() {
         <div className="card">
           <h3 style={{ marginBottom: '16px' }}>Team #4703 Leaderboard</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {users.sort((a, b) => b.gbp - a.gbp).map((u, i) => (
+            {users.sort((a, b) => b.gbp - a.gbp).map((u) => (
               <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: i === 0 ? 'var(--gold)' : 'var(--stone)', color: i === 0 ? 'var(--onyx)' : 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>{i + 1}</div>
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 500 }}>{u.name}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{u.role}</div>
@@ -142,7 +140,7 @@ export default function Analytics() {
         <div className="card">
           <h3 style={{ marginBottom: '16px' }}>Pipeline Funnel</h3>
           <div style={{ display: 'flex', height: '200px', alignItems: 'flex-end', justifyContent: 'space-around', paddingBottom: '24px', borderBottom: '1px solid var(--stone)' }}>
-            {funnelData.map((d, i) => {
+            {funnelData.map((d) => {
               const heightPct = (d.count / maxFunnel) * 100;
               return (
                 <div key={d.stage} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%' }}>

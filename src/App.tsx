@@ -1,4 +1,5 @@
-import { useState, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { AppProvider, useAppContext } from './context/AppContext';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
